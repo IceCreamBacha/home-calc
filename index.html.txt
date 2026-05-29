@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Home Purchase Calculator</title>
+  <meta name="theme-color" content="#b45309">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HomeCalc">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; padding: 0; background: #f8fafc; -webkit-text-size-adjust: 100%; }
+    input[type=range] { -webkit-appearance: none; appearance: none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 2px solid #b45309; box-shadow: 0 1px 4px rgba(0,0,0,0.2); cursor: pointer; }
+    input[type=range]::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 2px solid #b45309; box-shadow: 0 1px 4px rgba(0,0,0,0.2); cursor: pointer; }
+    .green-thumb::-webkit-slider-thumb { border-color: #16a34a !important; }
+    .green-thumb::-moz-range-thumb { border-color: #16a34a !important; }
+    .red-thumb::-webkit-slider-thumb   { border-color: #dc2626 !important; }
+    .red-thumb::-moz-range-thumb   { border-color: #dc2626 !important; }
+    .gray-thumb::-webkit-slider-thumb  { border-color: #9ca3af !important; }
+    .gray-thumb::-moz-range-thumb  { border-color: #9ca3af !important; }
+    .teal-thumb::-webkit-slider-thumb  { border-color: #0891b2 !important; }
+    .teal-thumb::-moz-range-thumb  { border-color: #0891b2 !important; }
+    .purple-thumb::-webkit-slider-thumb{ border-color: #7c3aed !important; }
+    .purple-thumb::-moz-range-thumb{ border-color: #7c3aed !important; }
+    #splash { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; gap:12px; background:#f8fafc; }
+    #splash p { color:#9ca3af; font-size:14px; font-family:system-ui,sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div id="splash"><div style="font-size:48px">🏠</div><p>Loading calculator…</p></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useMemo, useEffect } = React;
+
+    const fmt    = n => new Intl.NumberFormat('en-CA',{style:'currency',currency:'CAD',minimumFractionDigits:0,maximumFractionDigits:0}).format(n);
+    const fmtDec = n => new Intl.NumberFormat('en-CA',{style:'currency',currency:'CAD',minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
+    const pctStr = n => (n*100).toFixed(1)+'%';
+    const AMORT=25, SK='hpc_v6', PK='hpc_presets_v2';
+
+    const loadState   = ()=>{ try{ const r=localStorage.getItem(SK); return r?JSON.parse(r):null; }catch(e){ return null; } };
+    const saveState   = s=>{ try{ localStorage.setItem(SK,JSON.stringify(s)); }catch(e){} };
+    const loadPresets = ()=>{ try{ const r=localStorage.getItem(PK); return r?JSON.parse(r):[]; }catch(e){ return []; } };
+    const savePresets = p=>{ try{ localStorage.setItem(PK,JSON.stringify(p)); }catch(e){} };
+
+    function useWindowWidth(){
+      const [w,setW]=useState(window.innerWidth);
+      useEffect(()=>{ const fn=()=>setW(window.innerWidth); window.addEventListener('resize',fn); return()=>window.removeEventListener('resize',fn); },[]);
+      return w;
+    }
+
+    function Slider({label,value,onChange,min,max,step,format,color='#b45309',disabled}){
+      const [str,setStr]=useState(String(value));
+      const [focus,setFocus]=useState(false);
+      useEffect(()=>{ if(!focus)setStr(String(value)); },[value,focus]);
+      const safeMax=Math.max(max,min+step);
+      const p=Math.max(0,Math.min(100,((value-min)/(safeMax-min))*100));
+      const commit=raw=>{ const v=parseFloat(raw); if(isNaN(v)){setStr(String(value));return;} const s=Math.round(Math.max(min,Math.min(safeMax,v))/step)*step; onChange(s);setStr(String(s)); };
+      return(
+        <div style={{marginBottom:16,opacity:disabled?0.45:1}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,gap:8}}>
+            <span style={{fontSize:13,color:'#6b7280',fontWeight:500,flexShrink:0}}>{label}</span>
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              {format&&<span style={{fontSize:12,color:disabled?'#9ca3af':color==='#6b7280'?'#6b7280':'#b45309',fontWeight:600}}>{format(value)}</span>}
+              <input type="number" value={str} min={min} max={safeMax} step={step} disabled={disabled}
+                onChange={e=>setStr(e.target.value)}
+                onFocus={()=>setFocus(true)}
+                onBlur={()=>{ setFocus(false); commit(str); }}
+                onKeyDown={e=>{ if(e.key==='Enter')e.target.blur(); }}
+                style={{width:86,textAlign:'right',border:'1px solid #d1d5db',borderRadius:8,padding:'5px 8px',fontSize:16,fontWeight:600,color:'#374151',outline:'none',background:focus?'#fff':'#f9fafb',boxShadow:focus?'0 0 0 2px #fde68a':'none'}}/>
+            </div>
+          </div>
+          <input type="range" min={min} max={safeMax} step={step} value={value} disabled={disabled}
+            onChange={e=>{ const v=Number(e.target.value); onChange(v); if(!focus)setStr(String(v)); }}
+            style={{width:'100%',height:28,borderRadius:4,cursor:disabled?'not-allowed':'pointer',touchAction:'none',display:'block',
+              background:`linear-gradient(to right,${disabled?'#d1d5db':color} ${p}%,#e5e7eb ${p}%)`}}/>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'#9ca3af',marginTop:2}}>
+            <span>{format?format(min):min}</span><span>{format?format(safeMax):safeMax}</span>
+          </div>
+        </div>
+      );
+    }
+
+    function NumInput({label,value,onChange,prefix,suffix}){
+      return(
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:13,color:'#6b7280',fontWeight:500,marginBottom:4}}>{label}</div>
+          <div style={{display:'flex',border:'1px solid #d1d5db',borderRadius:8,overflow:'hidden'}}>
+            {prefix&&<span style={{padding:'10px',background:'#f9fafb',color:'#9ca3af',fontSize:13,borderRight:'1px solid #d1d5db',flexShrink:0}}>{prefix}</span>}
+            <input type="number" value={value} min={0} step={0.01}
+              onChange={e=>onChange(parseFloat(e.target.value)||0)}
+              style={{flex:1,padding:'10px',fontSize:16,border:'none',outline:'none',background:'#fff',minWidth:0}}/>
+            {suffix&&<span style={{padding:'10px',background:'#f9fafb',color:'#9ca3af',fontSize:13,borderLeft:'1px solid #d1d5db',flexShrink:0}}>{suffix}</span>}
+          </div>
+        </div>
+      );
+    }
+
+    function Card({title,icon,children}){
+      return(
+        <div style={{background:'#fff',borderRadius:16,border:'1px solid #f3f4f6',boxShadow:'0 1px 4px rgba(0,0,0,0.06)',padding:20,marginBottom:16}}>
+          <div style={{fontSize:14,fontWeight:700,color:'#1f2937',marginBottom:16,display:'flex',alignItems:'center',gap:6}}>
+            <span>{icon}</span>{title}
+          </div>
+          {children}
+        </div>
+      );
+    }
+
+    function Row({label,sub,value,status}){
+      const clr={good:'#16a34a',warn:'#d97706',bad:'#dc2626',neutral:'#1f2937'}[status||'neutral'];
+      return(
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',padding:'10px 0',borderBottom:'1px solid #f3f4f6'}}>
+          <div style={{paddingRight:12,flex:1}}>
+            <div style={{fontSize:13,color:'#374151',fontWeight:500}}>{label}</div>
+            {sub&&<div style={{fontSize:11,color:'#9ca3af',marginTop:2}}>{sub}</div>}
+          </div>
+          <div style={{fontSize:13,fontWeight:700,color:clr,textAlign:'right',flexShrink:0}}>{value}</div>
+        </div>
+      );
+    }
+
+    function Toggle({value,onChange,labelOn,labelOff}){
+      return(
+        <button onClick={()=>onChange(!value)}
+          style={{display:'inline-flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:20,border:'none',cursor:'pointer',
+            fontSize:12,fontWeight:600,background:value?'#d1fae5':'#fee2e2',color:value?'#065f46':'#991b1b',touchAction:'manipulation'}}>
+          <span style={{width:10,height:10,borderRadius:'50%',background:value?'#16a34a':'#dc2626',display:'inline-block',flexShrink:0}}/>
+          {value?labelOn:labelOff}
+        </button>
+      );
+    }
+
+    function Btn({children,onClick,style={},disabled}){
+      return(
+        <button onClick={onClick} disabled={disabled}
+          style={{padding:'10px 16px',borderRadius:8,border:'none',cursor:disabled?'not-allowed':'pointer',fontSize:13,fontWeight:600,opacity:disabled?0.6:1,touchAction:'manipulation',...style}}>
+          {children}
+        </button>
+      );
+    }
+
+    function AccountBadge({icon,label,value,ok}){
+      return(
+        <div style={{background:ok?'#f0fdf4':'#fef2f2',borderRadius:12,padding:'12px 14px',border:`1px solid ${ok?'#bbf7d0':'#fecaca'}`}}>
+          <div style={{fontSize:11,color:'#6b7280',marginBottom:3}}>{icon} {label}</div>
+          <div style={{fontSize:15,fontWeight:800,color:ok?'#15803d':'#dc2626'}}>{fmt(value)}</div>
+        </div>
+      );
+    }
+
+    function App(){
+      const w=useWindowWidth(); const mob=w<560;
+      const [loaded,setLoaded]=useState(false);
+      const [inc1,setInc1]=useState(5000);  const [inc2,setInc2]=useState(5000);
+      const [exp1,setExp1]=useState(2000);  const [exp2,setExp2]=useState(2000);
+      const [tfsa1,setTfsa1]=useState(20000); const [tfsa2,setTfsa2]=useState(20000);
+      const [fhsa1,setFhsa1]=useState(10000); const [fhsa2,setFhsa2]=useState(10000);
+      const [gic,setGic]=useState(10000); const [gicCashable,setGicCashable]=useState(true);
+      const [sav,setSav]=useState(20000);
+      const [price,setPrice]=useState(350000); const [dp,setDp]=useState(30000);
+      const [dpCash,setDpCash]=useState(0); const [dpFHSA,setDpFHSA]=useState(0); const [dpTFSA,setDpTFSA]=useState(0);
+      const [rate,setRate]=useState(5.5); const [rent,setRent]=useState(0);
+      const [hoa,setHoa]=useState(0); const [tax,setTax]=useState(300);
+      const [presets,setPresets]=useState([]);
+      const [presetName,setPresetName]=useState('');
+      const [showPresets,setShowPresets]=useState(false);
+      const [presetMsg,setPresetMsg]=useState('');
+      const [gicStr,setGicStr]=useState('10000'); const [gicFocus,setGicFocus]=useState(false);
+      useEffect(()=>{ if(!gicFocus)setGicStr(String(gic)); },[gic,gicFocus]);
+      useEffect(()=>{ setDpCash(p=>Math.min(p,sav)); },[sav]);
+      useEffect(()=>{ setDpFHSA(p=>Math.min(p,fhsa1+fhsa2)); },[fhsa1,fhsa2]);
+      useEffect(()=>{ setDpTFSA(p=>Math.min(p,tfsa1+tfsa2)); },[tfsa1,tfsa2]);
+
+      // Load from localStorage
+      useEffect(()=>{
+        const s=loadState();
+        if(s){
+          const set=(k,fn)=>{ if(s[k]!=null)fn(s[k]); };
+          set('inc1',setInc1);set('inc2',setInc2);set('exp1',setExp1);set('exp2',setExp2);
+          set('tfsa1',setTfsa1);set('tfsa2',setTfsa2);set('fhsa1',setFhsa1);set('fhsa2',setFhsa2);
+          set('gic',setGic);set('gicCashable',setGicCashable);set('sav',setSav);
+          set('price',setPrice);set('dp',setDp);set('rate',setRate);
+          set('rent',setRent);set('hoa',setHoa);set('tax',setTax);
+          set('dpCash',setDpCash);set('dpFHSA',setDpFHSA);set('dpTFSA',setDpTFSA);
+        }
+        setPresets(loadPresets());
+        setLoaded(true);
+      },[]);
+
+      // Save state to localStorage
+      useEffect(()=>{
+        if(!loaded)return;
+        saveState({inc1,inc2,exp1,exp2,tfsa1,tfsa2,fhsa1,fhsa2,gic,gicCashable,sav,price,dp,dpCash,dpFHSA,dpTFSA,rate,rent,hoa,tax});
+      },[loaded,inc1,inc2,exp1,exp2,tfsa1,tfsa2,fhsa1,fhsa2,gic,gicCashable,sav,price,dp,dpCash,dpFHSA,dpTFSA,rate,rent,hoa,tax]);
+
+      useEffect(()=>{ if(!loaded)return; savePresets(presets); },[presets,loaded]);
+
+      const savePreset=()=>{
+        const name=presetName.trim()||`Property ${presets.length+1}`;
+        setPresets(prev=>[{id:Date.now(),name,price,dp,dpCash,dpFHSA,dpTFSA,rate,rent,hoa,tax,savedAt:new Date().toLocaleDateString('en-CA')},...prev]);
+        setPresetName('');setPresetMsg('✓');setTimeout(()=>setPresetMsg(''),2500);
+      };
+      const loadPreset=p=>{ setPrice(p.price);setDp(Math.max(10000,Math.min(100000,p.dp)));setRate(p.rate);setRent(p.rent);setHoa(p.hoa);setTax(p.tax); if(p.dpCash!=null)setDpCash(p.dpCash); if(p.dpFHSA!=null)setDpFHSA(p.dpFHSA); if(p.dpTFSA!=null)setDpTFSA(p.dpTFSA); };
+      const deletePreset=id=>setPresets(prev=>prev.filter(p=>p.id!==id));
+
+      const c=useMemo(()=>{
+        const totalInc=inc1+inc2, totalExp=exp1+exp2;
+        const totalFHSA=fhsa1+fhsa2, totalTFSA=tfsa1+tfsa2;
+        const liquidGic=gicCashable?gic:0;
+        const maint=(price*0.01)/12, vac=rent>0?rent*0.05:0;
+        const minDown=price<=500000?price*0.05:25000+(price-500000)*0.1;
+        const dpPct=(dp/price)*100, downOk=dp>=minDown;
+        let cr=0;
+        if(dpPct<20&&dpPct>=15)cr=0.028;
+        else if(dpPct<15&&dpPct>=10)cr=0.031;
+        else if(dpPct<10&&dpPct>=5)cr=0.04;
+        const principal=price-dp, cmhc=(dpPct<20&&dpPct>=5)?principal*cr:0;
+        const mortP=principal+cmhc, n=AMORT*12;
+        const em=Math.pow(1+rate/200,1/6)-1;
+        const mm=em===0?mortP/n:mortP*(em*Math.pow(1+em,n))/(Math.pow(1+em,n)-1);
+        const gds=(mm+tax+maint)/totalInc, tds=(mm+tax+maint+hoa)/totalInc;
+        const sr=Math.max(rate+2,5.25), sem=Math.pow(1+sr/200,1/6)-1;
+        const sm=sem===0?mortP/n:mortP*(sem*Math.pow(1+sem,n))/(Math.pow(1+sem,n)-1);
+        const sGDS=(sm+tax+maint)/totalInc;
+        const qualifies=downOk&&gds<=0.32&&tds<=0.44&&sGDS<=0.32;
+        const totalH=mm+hoa+tax+maint+vac;
+        const cf=rent-totalH;
+        const combinedCF=totalInc-totalExp-totalH+rent;
+        const dpAllocated=dpCash+dpFHSA+dpTFSA, dpGap=dp-dpAllocated;
+        const cashAfter=sav-dpCash, fhsaAfter=totalFHSA-dpFHSA, tfsaAfter=totalTFSA-dpTFSA;
+        const savLeft=cashAfter+fhsaAfter+tfsaAfter+liquidGic;
+        const runway=combinedCF<0&&savLeft>0?savLeft/Math.abs(combinedCF):null;
+        const checks=[
+          {ok:qualifies,t:qualifies?'Meets mortgage qualification thresholds':'Fails GDS/TDS/stress test thresholds'},
+          {ok:savLeft>totalInc*3,t:savLeft>totalInc*3?'Healthy emergency buffer after purchase':'Low savings remaining after down payment'},
+          {ok:combinedCF>=0,t:combinedCF>=0?'Positive combined monthly cash flow':'Negative combined monthly cash flow'},
+          {ok:dpPct>=20,t:dpPct>=20?'No CMHC insurance required (≥20% down)':`CMHC premium applies (${dpPct.toFixed(1)}% down)`},
+        ];
+        const score=checks.filter(x=>x.ok).length;
+        return{totalInc,totalExp,totalFHSA,totalTFSA,liquidGic,maint,vac,minDown,dpPct,downOk,cmhc,mm,gds,tds,sGDS,qualifies,totalH,cf,combinedCF,dpAllocated,dpGap,cashAfter,fhsaAfter,tfsaAfter,savLeft,runway,checks,rec:score>=3?'yes':score>=2?'maybe':'no',sr};
+      },[inc1,inc2,exp1,exp2,tfsa1,tfsa2,fhsa1,fhsa2,gic,gicCashable,sav,price,dp,dpCash,dpFHSA,dpTFSA,rate,rent,hoa,tax]);
+
+      const RC=c.rec==='yes'?'#16a34a':c.rec==='maybe'?'#d97706':'#dc2626';
+      const RBg=c.rec==='yes'?'#f0fdf4':c.rec==='maybe'?'#fffbeb':'#fef2f2';
+      const RBr=c.rec==='yes'?'#bbf7d0':c.rec==='maybe'?'#fde68a':'#fecaca';
+      const RL=c.rec==='yes'?'🟢 Recommended to Purchase':c.rec==='maybe'?'🟡 Proceed with Caution':'🔴 Not Recommended at This Time';
+      const twoCol=mob?{display:'flex',flexDirection:'column'}:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16};
+      const sh={fontSize:10,fontWeight:700,color:'#9ca3af',textTransform:'uppercase',letterSpacing:1,marginBottom:12};
+      const pill=ok=>({display:'inline-block',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700,background:ok?'#dcfce7':'#fee2e2',color:ok?'#15803d':'#dc2626',marginLeft:6});
+      const dpG=((dp-10000)/90000)*100;
+      const dpSourceOk=c.dpGap===0;
+
+      if(!loaded)return null;
+
+      return(
+        <div style={{minHeight:'100vh',background:'#f8fafc',fontFamily:'system-ui,-apple-system,sans-serif',paddingBottom:40}}>
+
+          <div style={{background:'linear-gradient(135deg,#78350f 0%,#b45309 50%,#d97706 100%)',color:'#fff',padding:'24px 16px 20px',marginBottom:16}}>
+            <div style={{maxWidth:680,margin:'0 auto'}}>
+              <div style={{fontSize:mob?18:22,fontWeight:800,marginBottom:4}}>🏠 Home Purchase Calculator</div>
+              <div style={{fontSize:12,color:'#fde68a'}}>Canadian Mortgage & Affordability · CAD · Auto-saved ✓</div>
+              <div style={{display:'flex',gap:10,marginTop:12,flexWrap:'wrap'}}>
+                {[['Income',fmt(c.totalInc)+'/mo'],['Liquid Assets',fmt(c.savLeft+dp)],['Housing',fmtDec(c.totalH)+'/mo']].map(([l,v])=>(
+                  <div key={l} style={{background:'rgba(255,255,255,0.15)',borderRadius:10,padding:'7px 12px',flexShrink:0}}>
+                    <div style={{fontSize:10,color:'#fde68a',fontWeight:600}}>{l}</div>
+                    <div style={{fontSize:14,fontWeight:800}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div style={{maxWidth:680,margin:'0 auto',padding:'0 12px'}}>
+
+            <Card title="Monthly Net Income & Expenses" icon="💰">
+              <div style={twoCol}>
+                <div>
+                  <div style={sh}>Person 1</div>
+                  <Slider label="Net Income" value={inc1} onChange={setInc1} min={1000} max={10000} step={100} format={fmt}/>
+                  <Slider label="Personal Expenses" value={exp1} onChange={setExp1} min={1000} max={10000} step={100} format={fmt} color="#6b7280"/>
+                </div>
+                {mob
+                  ?<div style={{borderTop:'1px solid #f3f4f6',marginTop:4,paddingTop:14}}>
+                    <div style={sh}>Person 2</div>
+                    <Slider label="Net Income" value={inc2} onChange={setInc2} min={1000} max={10000} step={100} format={fmt}/>
+                    <Slider label="Personal Expenses" value={exp2} onChange={setExp2} min={1000} max={10000} step={100} format={fmt} color="#6b7280"/>
+                  </div>
+                  :<div style={{borderLeft:'1px solid #f3f4f6',paddingLeft:16}}>
+                    <div style={sh}>Person 2</div>
+                    <Slider label="Net Income" value={inc2} onChange={setInc2} min={1000} max={10000} step={100} format={fmt}/>
+                    <Slider label="Personal Expenses" value={exp2} onChange={setExp2} min={1000} max={10000} step={100} format={fmt} color="#6b7280"/>
+                  </div>
+                }
+              </div>
+              <div style={{background:'#fffbeb',borderRadius:10,padding:'10px 14px',display:'flex',justifyContent:'space-between',fontSize:13,marginTop:8}}>
+                <span style={{color:'#78716c'}}>Pre-housing monthly surplus</span>
+                <span style={{fontWeight:800,color:'#92400e'}}>{fmt(c.totalInc-c.totalExp)}/mo</span>
+              </div>
+            </Card>
+
+            <Card title="Savings & Investments" icon="📈">
+              <div style={twoCol}>
+                <div>
+                  <div style={sh}>Person 1</div>
+                  <Slider label="TFSA" value={tfsa1} onChange={setTfsa1} min={1000} max={100000} step={100} format={fmt}/>
+                  <Slider label="FHSA" value={fhsa1} onChange={setFhsa1} min={1000} max={40000} step={100} format={fmt}/>
+                </div>
+                {mob
+                  ?<div style={{borderTop:'1px solid #f3f4f6',marginTop:4,paddingTop:14}}>
+                    <div style={sh}>Person 2</div>
+                    <Slider label="TFSA" value={tfsa2} onChange={setTfsa2} min={1000} max={100000} step={100} format={fmt}/>
+                    <Slider label="FHSA" value={fhsa2} onChange={setFhsa2} min={1000} max={40000} step={100} format={fmt}/>
+                  </div>
+                  :<div style={{borderLeft:'1px solid #f3f4f6',paddingLeft:16}}>
+                    <div style={sh}>Person 2</div>
+                    <Slider label="TFSA" value={tfsa2} onChange={setTfsa2} min={1000} max={100000} step={100} format={fmt}/>
+                    <Slider label="FHSA" value={fhsa2} onChange={setFhsa2} min={1000} max={40000} step={100} format={fmt}/>
+                  </div>
+                }
+              </div>
+              <div style={{borderTop:'1px solid #f3f4f6',paddingTop:14,marginTop:8}}>
+                <div style={sh}>Combined</div>
+                <div style={{marginBottom:16}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,gap:8,flexWrap:'wrap'}}>
+                    <span style={{fontSize:13,color:'#6b7280',fontWeight:500}}>GICs</span>
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                      <span style={{fontSize:12,color:'#b45309',fontWeight:600}}>{fmt(gic)}</span>
+                      <input type="number" value={gicStr} min={1000} max={50000} step={100}
+                        onChange={e=>setGicStr(e.target.value)}
+                        onFocus={()=>setGicFocus(true)}
+                        onBlur={()=>{ setGicFocus(false); const v=parseFloat(gicStr); if(!isNaN(v)){const s=Math.round(Math.max(1000,Math.min(50000,v))/100)*100;setGic(s);setGicStr(String(s));}else setGicStr(String(gic)); }}
+                        onKeyDown={e=>{ if(e.key==='Enter')e.target.blur(); }}
+                        style={{width:86,textAlign:'right',border:'1px solid #d1d5db',borderRadius:8,padding:'5px 8px',fontSize:16,fontWeight:600,color:'#374151',outline:'none',background:gicFocus?'#fff':'#f9fafb',boxShadow:gicFocus?'0 0 0 2px #fde68a':'none'}}/>
+                      <Toggle value={gicCashable} onChange={setGicCashable} labelOn="Cashable" labelOff="Non-Cashable"/>
+                    </div>
+                  </div>
+                  <input type="range" className={gicCashable?'':'gray-thumb'} min={1000} max={50000} step={100} value={gic}
+                    onChange={e=>{ const v=Number(e.target.value);setGic(v);if(!gicFocus)setGicStr(String(v)); }}
+                    style={{width:'100%',height:28,borderRadius:4,cursor:'pointer',touchAction:'none',display:'block',
+                      background:`linear-gradient(to right,${gicCashable?'#b45309':'#9ca3af'} ${((gic-1000)/49000)*100}%,#e5e7eb ${((gic-1000)/49000)*100}%)`}}/>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'#9ca3af',marginTop:2}}>
+                    <span>{fmt(1000)}</span>
+                    {!gicCashable&&<span style={{color:'#dc2626',fontWeight:600}}>Locked — excluded from funds</span>}
+                    <span>{fmt(50000)}</span>
+                  </div>
+                </div>
+                <Slider label="Cash Savings" value={sav} onChange={setSav} min={1000} max={100000} step={100} format={fmt}/>
+              </div>
+              <div style={{background:'#fffbeb',borderRadius:10,padding:'10px 14px',marginTop:4}}>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:13}}>
+                  <span style={{color:'#78716c'}}>Total liquid assets</span>
+                  <span style={{fontWeight:800,color:'#92400e'}}>{fmt(c.totalFHSA+c.totalTFSA+sav+c.liquidGic)}</span>
+                </div>
+              </div>
+            </Card>
+
+            <Card title="Property Details" icon="🏡">
+              <Slider label="Property Price" value={price} onChange={setPrice} min={100000} max={500000} step={1000} format={fmt}/>
+              <div style={{marginBottom:16}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,gap:8}}>
+                  <span style={{fontSize:13,color:'#6b7280',fontWeight:500,flexShrink:0}}>Down Payment</span>
+                  <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',justifyContent:'flex-end'}}>
+                    <span style={{fontSize:12,color:'#b45309',fontWeight:600}}>{fmt(dp)}</span>
+                    <span style={pill(c.downOk)}>{c.dpPct.toFixed(1)}%</span>
+                    <input type="number" defaultValue={dp} key={`dp-${dp}`} min={10000} max={100000} step={100}
+                      onBlur={e=>{ const v=Math.max(10000,Math.min(100000,Math.round((parseFloat(e.target.value)||10000)/100)*100));setDp(v); }}
+                      onKeyDown={e=>{ if(e.key==='Enter')e.target.blur(); }}
+                      style={{width:86,textAlign:'right',border:'1px solid #d1d5db',borderRadius:8,padding:'5px 8px',fontSize:16,fontWeight:600,color:'#374151',outline:'none',background:'#f9fafb'}}/>
+                  </div>
+                </div>
+                <input type="range" className={c.downOk?'green-thumb':'red-thumb'} min={10000} max={100000} step={100} value={dp}
+                  onChange={e=>setDp(Number(e.target.value))}
+                  style={{width:'100%',height:28,borderRadius:4,cursor:'pointer',touchAction:'none',display:'block',
+                    background:`linear-gradient(to right,${c.downOk?'#16a34a':'#dc2626'} ${dpG}%,#e5e7eb ${dpG}%)`}}/>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:10,marginTop:3}}>
+                  <span style={{color:'#9ca3af'}}>{fmt(10000)}</span>
+                  <span style={{color:c.downOk?'#16a34a':'#dc2626',fontWeight:600}}>Min: {fmt(c.minDown)} ({(c.minDown/price*100).toFixed(1)}%)</span>
+                  <span style={{color:'#9ca3af'}}>{fmt(100000)}</span>
+                </div>
+              </div>
+
+              <div style={{background:'#f8fafc',borderRadius:12,padding:'14px',border:'1px solid #e5e7eb',marginBottom:16}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:6}}>
+                  <span style={{fontSize:13,fontWeight:700,color:'#374151'}}>Down Payment Sources</span>
+                  <span style={{fontSize:12,fontWeight:700,color:dpSourceOk?'#16a34a':c.dpAllocated>dp?'#dc2626':'#d97706'}}>
+                    {fmt(c.dpAllocated)} / {fmt(dp)} {dpSourceOk?'✓':c.dpAllocated>dp?'⚠ over':'⚠ short'}
+                  </span>
+                </div>
+                <div style={{height:8,background:'#e5e7eb',borderRadius:4,marginBottom:14,overflow:'hidden'}}>
+                  <div style={{height:'100%',borderRadius:4,background:dpSourceOk?'#16a34a':c.dpAllocated>dp?'#dc2626':'#f59e0b',width:`${Math.min(100,(c.dpAllocated/dp)*100)}%`}}/>
+                </div>
+                <Slider label="💵 From Cash Savings" value={dpCash} onChange={setDpCash} min={0} max={sav} step={100} format={fmt} color="#16a34a"/>
+                <Slider label="🏦 From FHSA" value={dpFHSA} onChange={setDpFHSA} min={0} max={c.totalFHSA} step={100} format={fmt} color="#0891b2" disabled={c.totalFHSA===0}/>
+                <Slider label="📈 From TFSA" value={dpTFSA} onChange={setDpTFSA} min={0} max={c.totalTFSA} step={100} format={fmt} color="#7c3aed" disabled={c.totalTFSA===0}/>
+              </div>
+
+              <div style={mob?{}:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+                <NumInput label="Mortgage Rate" value={rate} onChange={setRate} suffix="%"/>
+                <NumInput label="Monthly Rent Income" value={rent} onChange={setRent} prefix="$"/>
+                <NumInput label="Monthly HOA" value={hoa} onChange={setHoa} prefix="$"/>
+                <NumInput label="Monthly Property Tax" value={tax} onChange={setTax} prefix="$"/>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:4}}>
+                {[['🔧 Maintenance',fmtDec(c.maint)+'/mo','1% of value/yr (auto)'],['🏚️ Vacancy Buffer',fmtDec(c.vac)+'/mo','5% of rent (auto)']].map(([l,v,s])=>(
+                  <div key={l} style={{background:'#f8fafc',borderRadius:10,padding:'10px 12px',border:'1px solid #f1f5f9'}}>
+                    <div style={{fontSize:11,color:'#6b7280',marginBottom:2}}>{l}</div>
+                    <div style={{fontSize:14,fontWeight:700,color:'#374151'}}>{v}</div>
+                    <div style={{fontSize:10,color:'#9ca3af',marginTop:2}}>{s}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card title="Property Presets" icon="💾">
+              <div style={{display:'flex',gap:8,marginBottom:12,alignItems:'center'}}>
+                <input value={presetName} onChange={e=>setPresetName(e.target.value)}
+                  placeholder="Name this property..."
+                  onKeyDown={e=>{ if(e.key==='Enter')savePreset(); }}
+                  style={{flex:1,padding:'10px 12px',border:'1px solid #d1d5db',borderRadius:8,fontSize:16,outline:'none',minWidth:0}}/>
+                <Btn onClick={savePreset} style={{background:'#b45309',color:'#fff',flexShrink:0,whiteSpace:'nowrap'}}>Save {presetMsg}</Btn>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{fontSize:12,color:'#9ca3af'}}>{presets.length} saved preset{presets.length!==1?'s':''}</span>
+                {presets.length>0&&<button onClick={()=>setShowPresets(!showPresets)}
+                  style={{fontSize:13,color:'#b45309',fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:'6px 0',touchAction:'manipulation'}}>
+                  {showPresets?'Hide ▲':'Show all ▼'}
+                </button>}
+              </div>
+              {showPresets&&<div style={{marginTop:10}}>
+                {presets.map(p=>(
+                  <div key={p.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px',background:'#f8fafc',borderRadius:10,marginBottom:8,border:'1px solid #f1f5f9',gap:8}}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:700,color:'#1f2937',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
+                      <div style={{fontSize:11,color:'#9ca3af',marginTop:2}}>{fmt(p.price)} · {p.rate}% · {fmt(p.dp)} down · {p.savedAt}</div>
+                    </div>
+                    <div style={{display:'flex',gap:6,flexShrink:0}}>
+                      <Btn onClick={()=>loadPreset(p)} style={{background:'#fffbeb',color:'#92400e',border:'1px solid #fde68a',padding:'7px 12px',fontSize:13}}>Load</Btn>
+                      <Btn onClick={()=>deletePreset(p.id)} style={{background:'#fee2e2',color:'#dc2626',padding:'7px 12px',fontSize:13}}>✕</Btn>
+                    </div>
+                  </div>
+                ))}
+              </div>}
+              {presets.length===0&&<div style={{fontSize:13,color:'#9ca3af',textAlign:'center',padding:'12px 0'}}>No presets yet — configure property details above and save.</div>}
+            </Card>
+
+            <Card title="Analysis & Results" icon="📊">
+              <div style={{background:c.qualifies?'#f0fdf4':'#fef2f2',border:`1px solid ${c.qualifies?'#bbf7d0':'#fecaca'}`,borderRadius:12,padding:'14px 16px',marginBottom:16,display:'flex',gap:12,alignItems:'flex-start'}}>
+                <div style={{fontSize:24,flexShrink:0}}>{c.qualifies?'✅':'❌'}</div>
+                <div>
+                  <div style={{fontWeight:800,fontSize:15,color:c.qualifies?'#15803d':'#b91c1c'}}>{c.qualifies?'Likely Qualifies':'Does Not Qualify'}</div>
+                  <div style={{fontSize:12,color:c.qualifies?'#166534':'#991b1b',marginTop:4}}>GDS: <b>{pctStr(c.gds)}</b> (max 32%) · TDS: <b>{pctStr(c.tds)}</b> (max 44%) · Stress @{c.sr}%: <b>{pctStr(c.sGDS)}</b></div>
+                </div>
+              </div>
+              <Row label="Monthly Mortgage Payment" sub={`${AMORT}-yr amortization · ${rate}% (semi-annual compounding)`} value={fmtDec(c.mm)}/>
+              {c.cmhc>0&&<Row label="CMHC Insurance Premium" sub="Added to mortgage principal" value={fmt(c.cmhc)} status="warn"/>}
+              <Row label="Total Monthly Housing Cost" sub="Mortgage + HOA + tax + maintenance + vacancy" value={fmtDec(c.totalH)}/>
+              <Row label="Savings Remaining After Purchase" sub="All accounts after down payment allocation" value={fmt(c.savLeft)} status={c.savLeft>c.totalInc*3?'good':c.savLeft>0?'warn':'bad'}/>
+              <Row label="Monthly Cash Flow (Property)" sub="Rent income − housing costs only" value={(c.cf>=0?'+':'')+fmtDec(c.cf)+'/mo'} status={c.cf>=0?'good':'bad'}/>
+              <Row label="Combined Monthly Cash Flow" sub="Personal income + rent − personal expenses − housing" value={(c.combinedCF>=0?'+':'')+fmtDec(c.combinedCF)+'/mo'} status={c.combinedCF>=200?'good':c.combinedCF>=0?'warn':'bad'}/>
+              <Row label="Monthly Runway" sub={c.runway!==null?'Months savings covers combined shortfall':'Combined cash flow is positive'} value={c.runway!==null?c.runway.toFixed(1)+' months':'Indefinite ✓'} status={c.runway===null?'good':c.runway>=6?'warn':'bad'}/>
+              <div style={{marginTop:16,paddingTop:16,borderTop:'1px solid #f3f4f6'}}>
+                <div style={{fontSize:13,fontWeight:700,color:'#374151',marginBottom:10}}>Account Balances After Purchase</div>
+                <div style={{display:'grid',gridTemplateColumns:mob?'1fr 1fr':'1fr 1fr 1fr 1fr',gap:10}}>
+                  <AccountBadge icon="💵" label="Cash" value={c.cashAfter} ok={c.cashAfter>=0}/>
+                  <AccountBadge icon="🏦" label="FHSA" value={c.fhsaAfter} ok={c.fhsaAfter>=0}/>
+                  <AccountBadge icon="📈" label="TFSA" value={c.tfsaAfter} ok={c.tfsaAfter>=0}/>
+                  <AccountBadge icon="🔒" label={gicCashable?'GICs':'GICs (locked)'} value={gic} ok={true}/>
+                </div>
+                {!dpSourceOk&&<div style={{fontSize:12,color:'#d97706',marginTop:10,padding:'8px 12px',background:'#fffbeb',borderRadius:8}}>
+                  ⚠️ Down payment sources {c.dpGap>0?`under-allocated by ${fmt(c.dpGap)}`:`over-allocated by ${fmt(Math.abs(c.dpGap))}`}
+                </div>}
+              </div>
+              <div style={{marginTop:16,background:RBg,border:`1px solid ${RBr}`,borderRadius:12,padding:'14px 16px'}}>
+                <div style={{fontWeight:800,fontSize:15,color:RC,marginBottom:10}}>{RL}</div>
+                {c.checks.map((ch,i)=>(
+                  <div key={i} style={{display:'flex',gap:8,alignItems:'flex-start',marginBottom:6,fontSize:13,color:ch.ok?'#15803d':'#b91c1c'}}>
+                    <span style={{flexShrink:0}}>{ch.ok?'✓':'✗'}</span><span>{ch.t}</span>
+                  </div>
+                ))}
+                <div style={{marginTop:10,fontSize:11,color:'#9ca3af',borderTop:'1px solid rgba(0,0,0,0.08)',paddingTop:8}}>
+                  ⚠️ Based on net income. Lenders use gross income for official GDS/TDS — consult a mortgage advisor for a formal pre-approval.
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
